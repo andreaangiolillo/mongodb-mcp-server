@@ -37,17 +37,18 @@ export type { StreamableHttpRunnerOptions } from "./streamableHttp.js";
 export { TransportRunnerBase } from "./base.js";
 
 // Concrete transport runners
-export { StdioRunner, type CreateServerFn as StdioCreateServerFn } from "./stdio.js";
+export { StdioRunner } from "./stdio.js";
 export { StreamableHttpRunner } from "./streamableHttp.js";
-export {
-    DryRunModeRunner,
-    type DryRunModeTestHelpers,
-    type CreateServerFn as DryRunCreateServerFn,
-} from "./dryModeRunner.js";
+export { DryRunModeRunner, type DryRunModeTestHelpers } from "./dryModeRunner.js";
 
 // HTTP Servers
 export { MCPHttpServer, type MCPHttpServerOptions } from "./mcpHttpServer.js";
-export { MonitoringServer, type MonitoringServerOptions } from "./monitoringServer.js";
+export {
+    MonitoringServer,
+    type MonitoringServerOptions,
+    type MonitoringServerConfig,
+    type MonitoringServerDependencies,
+} from "./monitoringServer.js";
 
 // Express HTTP Server base
 export { ExpressBasedHttpServer, type ExpressConfig } from "./expressBasedHttpServer.js";

@@ -4,20 +4,32 @@ import { LogId } from "@mongodb-js/mcp-core";
 import { ExpressBasedHttpServer } from "./expressBasedHttpServer.js";
 
 /**
- * Options for creating a MonitoringServer instance.
+ * Configuration options for MonitoringServer (not including dependencies).
  */
-export type MonitoringServerOptions<TMetrics extends MetricDefinitions = MetricDefinitions> = {
+export type MonitoringServerConfig = {
     /** Host to bind the monitoring server to */
     host: string;
     /** Port to bind the monitoring server to */
     port: number;
     /** Features to enable on the monitoring server */
     features: MonitoringServerFeature[];
+};
+
+/**
+ * Dependencies required by MonitoringServer.
+ */
+export type MonitoringServerDependencies<TMetrics extends MetricDefinitions = MetricDefinitions> = {
     /** Logger for the server */
     logger: ILogger;
     /** Metrics instance */
     metrics: IMetrics<TMetrics>;
 };
+
+/**
+ * Complete options for creating a MonitoringServer instance.
+ */
+export type MonitoringServerOptions<TMetrics extends MetricDefinitions = MetricDefinitions> =
+    MonitoringServerConfig & MonitoringServerDependencies<TMetrics>;
 
 /**
  * HTTP server that provides monitoring endpoints like health checks and metrics.

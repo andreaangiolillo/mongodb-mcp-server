@@ -121,9 +121,9 @@ All transport runners and HTTP server implementations have been extracted into a
 + import { StdioRunner, StreamableHttpRunner } from "@mongodb-js/mcp-transports";
 ```
 
-### ServerFactory Pattern
+### Inheritance Pattern for Server Creation
 
-The transport runners no longer depend on the concrete `Server` class. Instead, they accept a `ServerFactory` callback that handles server instantiation. This enables dependency injection and makes the transports reusable with different server implementations.
+Transport runners now use an inheritance pattern for server creation. To customize server instantiation, extend the runner class and override the `createServer()` method:
 
 **Before:**
 
@@ -139,22 +139,21 @@ const runner = new StdioRunner({
 **After:**
 
 ```typescript
-import { StdioRunner, ServerFactory } from "@mongodb-js/mcp-transports";
-import { Server, ServerOptions } from "mongodb-mcp-server";
+import { StdioRunner } from "@mongodb-js/mcp-transports";
+import { Server } from "mongodb-mcp-server";
 
-const serverFactory: ServerFactory = {
-  async createServer(options: ServerOptions) {
+class MyStdioRunner extends StdioRunner {
+  protected override async createServer({ serverOptions, sessionOptions }) {
     // Create and configure your server
     return new Server({
-      mcpServer: options.mcpServer,
-      session: options.session,
+      mcpServer,
+      session,
       // ... other options
     });
-  },
-};
+  }
+}
 
-const runner = new StdioRunner({
-  serverFactory, // Inject server creation logic
+const runner = new MyStdioRunner({
   loggers: [logger],
   metrics,
 });
@@ -217,7 +216,7 @@ Several types have been moved or renamed:
 | `TransportRunnerConfig`                           | `TransportRunnerBaseOptions`                         |
 | `StreamableHttpTransportRunnerConfig`             | `StreamableHttpRunnerOptions`                        |
 | `MonitoringServerConfig` (from streamableHttp.ts) | `MonitoringServerConfig` (from types.ts)             |
-| `CreateSessionConfigFn`                           | Removed - use `ServerFactory.createServerForRequest` |
+| `CreateSessionConfigFn`                           | Removed - extend `StreamableHttpRunner` and override `createServerForRequest()` |
 | `CustomizableServerOptions`                       | Same name, moved to `@mongodb-js/mcp-transports`     |
 | `CustomizableSessionOptions`                      | Same name, moved to `@mongodb-js/mcp-transports`     |
 
@@ -229,7 +228,7 @@ The following items have been removed from the transports package:
 - `TransportRunnerConfig.createConnectionManager` - Use `ServerFactory` pattern
 - `TransportRunnerConfig.connectionErrorHandler` - Pass via `sessionOptions`
 - `TransportRunnerConfig.createAtlasLocalClient` - Use `sessionOptions`
-- `TransportRunnerConfig.createSessionConfig` - Use `ServerFactory.createServerForRequest`
+- `TransportRunnerConfig.createSessionConfig` - Extend `StreamableHttpRunner` and override `createServerForRequest()`
 - `TransportRunnerConfig.createApiClient` - Use `sessionOptions`
 - `TransportRunnerConfig.tools` - Pass via `serverOptions`
 - `TransportRunnerConfig.telemetryProperties` - Pass via `serverOptions`
@@ -247,32 +246,12 @@ The HTTP server implementations are now available from the new package:
 
 **BREAKING CHANGE:** `MCPHttpServer` no longer accepts a `createServer` callback in its constructor. Instead, you must extend the class and override the `createServer()` method:
 
-**Before:**
-
-```typescript
-import { MCPHttpServer } from "@mongodb-js/mcp-transports";
-
-const httpServer = new MCPHttpServer({
-  httpOptions: { host, port, bodyLimit, headers, responseType },
-  sessionOptions: { idleTimeoutMs, notificationTimeoutMs, externallyManagedSessions },
-  createServer: async () => {
-    // Create server instance
-    return new MyServer({ ... });
-  },
-  logger,
-  metrics,
-  sessionStore,
-});
-```
-
-**After:**
-
 ```typescript
 import { MCPHttpServer } from "@mongodb-js/mcp-transports";
 
 class MyMCPHttpServer extends MCPHttpServer<MyServer> {
   private userConfig: UserConfig;
-  private logger: CompositeLogger;
+  private baseLogger: CompositeLogger;
 
   constructor(options: {
     userConfig: UserConfig;
@@ -284,14 +263,14 @@ class MyMCPHttpServer extends MCPHttpServer<MyServer> {
   }) {
     super(options);
     this.userConfig = options.userConfig;
-    this.logger = options.logger;
+    this.baseLogger = options.logger;
   }
 
   protected override async createServer(): Promise<MyServer> {
     // Create and return your server instance
     return new MyServer({
       userConfig: this.userConfig,
-      logger: this.logger,
+      logger: this.baseLogger,
       // ... other options
     });
   }
@@ -394,7 +373,7 @@ The following are now exported from `@mongodb-js/mcp-tools-mongodb`:
 - `ConnectionManager`, `MCPConnectionManager`
 - `ConnectionStateConnected`, `ConnectionSettings`, `AnyConnectionState`
 - `ConnectionManagerEvents`, `ConnectionStateConnecting`, `ConnectionStateDisconnected`
-- `ConnectionStateErrored`, `ConnectionManagerFactoryFn`, `defaultCreateConnectionManager`
+- `ConnectionStateErrored`, `ConnectionManagerFactoryFn`
 - `IDeviceId`, `IPackageInfo`, `IUserConfig`
 
 #### Connection utilities

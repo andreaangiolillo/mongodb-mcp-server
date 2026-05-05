@@ -3,23 +3,6 @@ import { TransportRunnerBase } from "./base.js";
 import { InMemoryTransport } from "./inMemoryTransport.js";
 import type { DryRunModeRunnerOptions, CustomizableServerOptions, CustomizableSessionOptions } from "./types.js";
 
-export type CreateServerFn<TServer, TContext = unknown> = (options: {
-    serverOptions?: CustomizableServerOptions<TContext>;
-    sessionOptions?: CustomizableSessionOptions;
-}) => Promise<TServer>;
-
-/**
- * Extended options for DryRunModeRunner that include a server factory function.
- */
-export type DryRunModeRunnerOptionsWithFactory<
-    TServer = unknown,
-    TContext = unknown,
-    TMetrics extends MetricDefinitions = MetricDefinitions,
-> = DryRunModeRunnerOptions<TMetrics> & {
-    /** Factory function to create the server instance */
-    createServer: CreateServerFn<TServer, TContext>;
-};
-
 /**
  * Test helpers interface for dry run mode.
  */
@@ -34,27 +17,17 @@ export type DryRunModeTestHelpers = {
  * Transport runner for dry-run mode.
  * Dumps configuration and enabled tools, then exits without starting the server.
  *
- * You can either:
- * 1. Pass a `createServer` factory function to the constructor
- * 2. Extend this class and override the `createServer()` method
+ * To customize server creation, extend this class and override the `createServer()` method:
  *
- * @example Using a factory function
- * ```typescript
- * const runner = new DryRunModeRunner({
- *   consoleLogger,
- *   createServer: async ({ serverOptions, sessionOptions }) => {
- *     return new MyServer({ ... });
- *   }
- * });
- * ```
- *
- * @example Using subclassing
+ * @example
  * ```typescript
  * class MyDryRunRunner extends DryRunModeRunner {
  *   protected override async createServer({ serverOptions, sessionOptions }) {
  *     return new MyServer({ ... });
  *   }
  * }
+ *
+ * const runner = new MyDryRunRunner({ loggers, metrics, consoleLogger });
  * ```
  */
 export class DryRunModeRunner<
@@ -72,17 +45,10 @@ export class DryRunModeRunner<
 > extends TransportRunnerBase<TServer, TContext, TMetrics> {
     private server: TServer | undefined;
     private consoleLogger: DryRunModeTestHelpers["logger"];
-    private createServerFn?: CreateServerFn<TServer, TContext>;
 
-    constructor({
-        loggers,
-        metrics,
-        consoleLogger,
-        createServer,
-    }: DryRunModeRunnerOptionsWithFactory<TServer, TContext, TMetrics>) {
+    constructor({ loggers, metrics, consoleLogger }: DryRunModeRunnerOptions<TMetrics>) {
         super({ loggers, metrics });
         this.consoleLogger = consoleLogger;
-        this.createServerFn = createServer;
     }
 
     override async start({
@@ -120,22 +86,13 @@ export class DryRunModeRunner<
     }
 
     /**
-     * Creates the server instance. Override this method in subclasses
-     * to customize server creation, or provide a `createServer` function
-     * to the constructor.
+     * Creates the server instance. Must be implemented by subclasses.
      */
-    protected createServer({
+    protected abstract createServer({
         serverOptions,
         sessionOptions,
     }: {
         serverOptions?: CustomizableServerOptions<TContext>;
         sessionOptions?: CustomizableSessionOptions;
-    }): Promise<TServer> {
-        if (this.createServerFn) {
-            return this.createServerFn({ serverOptions, sessionOptions });
-        }
-        throw new Error(
-            "DryRunModeRunner: either provide createServer in constructor or override createServer() method"
-        );
-    }
+    }): Promise<TServer>;
 }
