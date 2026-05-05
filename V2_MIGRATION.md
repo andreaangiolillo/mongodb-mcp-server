@@ -300,7 +300,11 @@ class MyMCPHttpServer extends MCPHttpServer<MyServer> {
 const httpServer = new MyMCPHttpServer({
   userConfig,
   httpOptions: { host, port, bodyLimit, headers, responseType },
-  sessionOptions: { idleTimeoutMs, notificationTimeoutMs, externallyManagedSessions },
+  sessionOptions: {
+    idleTimeoutMs,
+    notificationTimeoutMs,
+    externallyManagedSessions,
+  },
   logger,
   metrics,
   sessionStore,
@@ -309,18 +313,18 @@ const httpServer = new MyMCPHttpServer({
 
 #### Type Renames
 
-| Old name | New name |
-|----------|----------|
-| `MCPHttpServerConstructorArgs` | `MCPHttpServerOptions` |
+| Old name                          | New name                  |
+| --------------------------------- | ------------------------- |
+| `MCPHttpServerConstructorArgs`    | `MCPHttpServerOptions`    |
 | `MonitoringServerConstructorArgs` | `MonitoringServerOptions` |
-| `httpConfig` | `httpOptions` |
-| `sessionConfig` | `sessionOptions` |
+| `httpConfig`                      | `httpOptions`             |
+| `sessionConfig`                   | `sessionOptions`          |
 
 #### Removed Factory Functions
 
 The following factory functions have been removed. Use `new ClassName()` directly:
 
-- `createDefaultMcpHttpServer()` - Use `new MCPHttpServer()` 
+- `createDefaultMcpHttpServer()` - Use `new MCPHttpServer()`
 - `createDefaultMonitoringServer()` - Use `new MonitoringServer()`
 - `createDefaultSessionStore()` - Use `new SessionStore()`
 

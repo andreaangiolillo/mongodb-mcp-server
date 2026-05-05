@@ -39,11 +39,11 @@ export { ConsoleLogger } from "@mongodb-js/mcp-logging";
 export {
     StreamableHttpRunner,
     MCPHttpServer,
-    createDefaultMcpHttpServer,
     MonitoringServer,
-    createDefaultMonitoringServer,
     type StreamableHttpRunnerOptions as StreamableHttpTransportRunnerConfig,
     type MonitoringServerConfig,
+    type MCPHttpServerOptions,
+    type MonitoringServerOptions,
 } from "@mongodb-js/mcp-transports";
 export type { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 export { StdioRunner } from "@mongodb-js/mcp-transports";
