@@ -7,6 +7,9 @@ import type {
     IMetrics,
     MetricDefinitions,
     TransportRequestContext,
+    ISessionStore,
+    HttpServerConfig,
+    SessionManagementConfig,
 } from "@mongodb-js/mcp-types";
 import { LogId } from "@mongodb-js/mcp-core";
 import { ExpressBasedHttpServer } from "./expressBasedHttpServer.js";
@@ -18,15 +21,41 @@ import {
     JSON_RPC_ERROR_CODE_DISALLOWED_EXTERNAL_SESSION,
     JSON_RPC_ERROR_CODE_PROCESSING_REQUEST_FAILED,
 } from "./jsonRpcErrorCodes.js";
-import type {
-    ISessionStore,
-    HttpServerConfig,
-    SessionManagementConfig,
-} from "@mongodb-js/mcp-types";
-import type {
-    ServerFactory,
-    ServerOptions,
-} from "./types.js";
+
+/**
+ * Function type for creating a server instance.
+ */
+export type CreateServerFn<
+    TServer = unknown,
+    TContext = unknown,
+    TMetrics extends MetricDefinitions = MetricDefinitions,
+> = (options?: {
+    serverOptions?: { toolContext?: TContext; telemetryProperties?: Record<string, string> };
+    sessionOptions?: {
+        apiClient?: unknown;
+        atlasLocalClient?: unknown;
+        connectionManager?: unknown;
+        connectionErrorHandler?: unknown;
+    };
+}) => Promise<TServer>;
+
+/**
+ * Function type for creating a server instance for a specific request.
+ */
+export type CreateServerForRequestFn<
+    TServer = unknown,
+    TContext = unknown,
+    TMetrics extends MetricDefinitions = MetricDefinitions,
+> = (options: {
+    serverOptions?: { toolContext?: TContext; telemetryProperties?: Record<string, string> };
+    sessionOptions?: {
+        apiClient?: unknown;
+        atlasLocalClient?: unknown;
+        connectionManager?: unknown;
+        connectionErrorHandler?: unknown;
+    };
+    request: TransportRequestContext;
+}) => Promise<TServer>;
 
 /**
  * Constructor arguments for creating an MCPHttpServer instance.
@@ -40,26 +69,17 @@ export type MCPHttpServerConstructorArgs<
     httpConfig: HttpServerConfig;
     /** Session management configuration */
     sessionConfig: SessionManagementConfig;
-    /** Server factory for creating server instances */
-    serverFactory: ServerFactory<TServer, TContext, TMetrics>;
+    /** Function to create server instances */
+    createServer: CreateServerFn<TServer, TContext, TMetrics>;
+    /** Optional function to create server for a specific request */
+    createServerForRequest?: CreateServerForRequestFn<TServer, TContext, TMetrics>;
     /** Logger for the server */
     logger: ICompositeLogger;
     /** Metrics instance */
     metrics: IMetrics<TMetrics>;
     /** Session store for managing transports */
     sessionStore: ISessionStore<StreamableHTTPServerTransport>;
-    /** Optional server options to pass to factory */
-    serverOptions?: ServerOptions<TContext, TMetrics>;
 };
-
-/**
- * A function to create a custom MCPHttpServer instance.
- */
-export type CreateMcpHttpServerFn<
-    TServer = unknown,
-    TContext = unknown,
-    TMetrics extends MetricDefinitions = MetricDefinitions,
-> = (args: MCPHttpServerConstructorArgs<TServer, TContext, TMetrics>) => MCPHttpServer<TServer, TContext, TMetrics>;
 
 /**
  * HTTP server that handles MCP requests over HTTP using the Streamable HTTP transport.
@@ -70,21 +90,21 @@ export class MCPHttpServer<
     TMetrics extends MetricDefinitions = MetricDefinitions,
 > extends ExpressBasedHttpServer {
     private readonly sessionStore: ISessionStore<StreamableHTTPServerTransport>;
-    private readonly serverOptions?: ServerOptions<TContext, TMetrics>;
     public readonly httpConfig: HttpServerConfig;
     public readonly sessionConfig: SessionManagementConfig;
     private readonly metrics: IMetrics<TMetrics>;
-    private readonly serverFactory: ServerFactory<TServer, TContext, TMetrics>;
+    private readonly createServer: CreateServerFn<TServer, TContext, TMetrics>;
+    private readonly createServerForRequest?: CreateServerForRequestFn<TServer, TContext, TMetrics>;
     private readonly pendingInitializations = new Map<string, Promise<void>>();
 
     constructor({
         httpConfig,
         sessionConfig,
-        serverFactory,
+        createServer,
+        createServerForRequest,
         logger,
         metrics,
         sessionStore,
-        serverOptions,
     }: MCPHttpServerConstructorArgs<TServer, TContext, TMetrics>) {
         super({
             port: httpConfig.port,
@@ -94,8 +114,8 @@ export class MCPHttpServer<
         });
         this.httpConfig = httpConfig;
         this.sessionConfig = sessionConfig;
-        this.serverFactory = serverFactory;
-        this.serverOptions = serverOptions;
+        this.createServer = createServer;
+        this.createServerForRequest = createServerForRequest;
         this.metrics = metrics;
         this.sessionStore = sessionStore;
     }
@@ -143,12 +163,10 @@ export class MCPHttpServer<
         server: TServer & { session?: { logger: ILogger } }
     ): NodeJS.Timeout | undefined {
         if (this.httpConfig.responseType === "json") {
-            // Don't start the ping loop for JSON response type since the connection is short-lived and pings aren't needed
             return undefined;
         }
 
         let failedPings = 0;
-        // eslint-disable-next-line @typescript-eslint/no-misused-promises
         const keepAliveLoop = setInterval(async () => {
             try {
                 server.session?.logger.debug({
@@ -176,8 +194,7 @@ export class MCPHttpServer<
                         await transport.close();
                     }
                 } catch {
-                    // Ignore the error of the transport close as there's nothing else
-                    // we can do at this point.
+                    // Ignore the error of the transport close
                 }
             }
         }, 30_000);
@@ -185,17 +202,10 @@ export class MCPHttpServer<
         return keepAliveLoop;
     }
 
-    /**
-     * Generates a random UUID for session IDs.
-     */
     private getRandomUUID(): string {
         return crypto.randomUUID();
     }
 
-    /**
-     * Ensures the session for the given sessionId is initialized, serializing
-     * concurrent initialization attempts so only one runs at a time.
-     */
     private async ensureSessionInitialized({
         req,
         sessionId: providedSessionId,
@@ -205,17 +215,14 @@ export class MCPHttpServer<
         sessionId?: string;
         isImplicitInitialization: boolean;
     }): Promise<string> {
-        /** StreamableHTTPTransport needs to be imported dynamically as it uses Node-specific APIs */
         const { StreamableHTTPServerTransport } = await import("@modelcontextprotocol/sdk/server/streamableHttp.js");
 
         const sessionId = providedSessionId ?? this.getRandomUUID();
 
-        // Check if session already exists
         if (await this.sessionStore.getSession(sessionId)) {
             return sessionId;
         }
 
-        // Serialize initializations: if another request is initializing, wait for it
         const pendingInit = this.pendingInitializations.get(sessionId);
         if (pendingInit) {
             this.logger.debug({
@@ -226,8 +233,7 @@ export class MCPHttpServer<
             try {
                 await pendingInit;
             } catch {
-                // The initializer handles its own error; we just need to
-                // let the caller re-check the store.
+                // The initializer handles its own error
             }
             return sessionId;
         }
@@ -244,15 +250,10 @@ export class MCPHttpServer<
                 query: req.query as Record<string, string | string[] | undefined>,
             };
 
-            // Use serverFactory to create server for this request
-            const server =
-                (await this.serverFactory.createServerForRequest?.({
-                    ...this.serverOptions,
-                    request,
-                } as ServerOptions<TContext, TMetrics> & { request: TransportRequestContext })) ??
-                (await this.serverFactory.createServer(
-                    this.serverOptions ?? ({} as ServerOptions<TContext, TMetrics>)
-                ));
+            // Use the provided createServer function or createServerForRequest if available
+            const server = this.createServerForRequest
+                ? await this.createServerForRequest({ request })
+                : await this.createServer();
 
             const transport = new StreamableHTTPServerTransport({
                 sessionIdGenerator: (): string => sessionId,
@@ -270,8 +271,6 @@ export class MCPHttpServer<
                 },
             });
 
-            // HACK: When we're implicitly initializing the session, we want to configure the session id and _initialized flag on the transport
-            // so that it believes it actually went through the initialization flow.
             if (isImplicitInitialization) {
                 const internalTransport = transport["_webStandardTransport"] as {
                     _initialized: boolean;
@@ -281,7 +280,6 @@ export class MCPHttpServer<
                 internalTransport.sessionId = sessionId;
             }
 
-            // Set session ID attribute on logger if available
             const serverWithLogger = server as { session?: { logger: ICompositeLogger } };
             serverWithLogger.session?.logger.setAttribute("sessionId", sessionId);
 
@@ -321,12 +319,10 @@ export class MCPHttpServer<
                 context: "streamableHttpTransport",
                 message: `Failed to initialize session ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
             });
-            // Remove the partially initialized session on failure so that
-            // subsequent requests don't see a broken session and can retry
             try {
                 await this.sessionStore.closeSession({ sessionId, reason: "unknown" });
             } catch {
-                // Session might not be in the store, that's fine
+                // Session might not be in the store
             }
             throw error;
         } finally {
@@ -338,7 +334,6 @@ export class MCPHttpServer<
     protected setupMiddlewares(): void {
         this.app.use(express.json({ limit: this.httpConfig.bodyLimit ?? 1024 * 1024 }));
 
-        // Validate headers if configured
         const headers = this.httpConfig.headers;
         if (headers && Object.keys(headers).length > 0) {
             this.app.use((req, res, next) => {
@@ -354,7 +349,6 @@ export class MCPHttpServer<
         }
     }
 
-    // eslint-disable-next-line @typescript-eslint/require-await
     protected override async setupRoutes(): Promise<void> {
         this.setupMiddlewares();
 
@@ -438,7 +432,6 @@ export class MCPHttpServer<
                 if (this.httpConfig.responseType === "sse") {
                     await handleSessionRequest(req, res);
                 } else {
-                    // Don't allow SSE upgrades if the response type is JSON
                     res.status(405).set("Allow", ["POST", "DELETE"]).send("Method Not Allowed");
                 }
             })

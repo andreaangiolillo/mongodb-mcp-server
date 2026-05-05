@@ -1,16 +1,11 @@
 import { CompositeLogger, type LoggerBase } from "@mongodb-js/mcp-core";
-import type { IMetrics, MetricDefinitions } from "@mongodb-js/mcp-types";
-import type {
-    ServerFactory,
-    ServerOptions,
-    TransportRunnerBaseOptions,
-    CustomizableServerOptions,
-    CustomizableSessionOptions,
-} from "./types.js";
+import type { ILogger, IMetrics, MetricDefinitions } from "@mongodb-js/mcp-types";
+import type { CustomizableServerOptions, CustomizableSessionOptions, ServerOptions } from "./types.js";
 
 /**
  * Base class for all transport runners.
- * Provides common functionality and uses ServerFactory for decoupled server creation.
+ * Provides common functionality. Subclasses should override `createServer()`
+ * to customize server instantiation.
  */
 export abstract class TransportRunnerBase<
     TServer = unknown,
@@ -20,35 +15,33 @@ export abstract class TransportRunnerBase<
     public logger: CompositeLogger;
     public metrics: IMetrics<TMetrics>;
 
-    /** Server factory for creating server instances */
-    protected readonly serverFactory: ServerFactory<TServer, TContext, TMetrics>;
-
-    protected constructor({
-        serverFactory,
-        loggers,
-        metrics,
-    }: TransportRunnerBaseOptions<TMetrics> & { serverFactory: ServerFactory<TServer, TContext, TMetrics> }) {
-        this.serverFactory = serverFactory;
-        this.metrics = metrics ?? ({ getMetrics: () => Promise.resolve("") } as unknown as IMetrics<TMetrics>);
+    protected constructor({ loggers, metrics }: { loggers?: LoggerBase[]; metrics?: IMetrics<TMetrics> }) {
+        this.metrics = metrics ?? this.createNoopMetrics();
 
         // Initialize logger
-        const baseLoggers = (loggers as LoggerBase[] | undefined) ?? [];
+        const baseLoggers = loggers ?? [];
         this.logger = new CompositeLogger({ loggers: baseLoggers });
     }
 
     /**
-     * Creates a new MCP server instance with the provided configuration.
-     * Uses the injected ServerFactory.
+     * Creates a no-op metrics implementation for when no metrics are provided.
+     * Returns an empty string for getMetrics() and undefined for any metric get.
      */
-    protected async createServer({
-        serverOptions,
-    }: {
-        serverOptions?: CustomizableServerOptions<TContext>;
-    } = {}): Promise<TServer> {
-        // Server factory handles the actual server creation
-        // We pass the merged options to the factory
-        return this.serverFactory.createServer(serverOptions as ServerOptions<TContext, TMetrics>);
+    private createNoopMetrics(): IMetrics<TMetrics> {
+        return {
+            get: <K extends keyof TMetrics>() => undefined as TMetrics[K],
+            getMetrics: () => Promise.resolve(""),
+        } as IMetrics<TMetrics>;
     }
+
+    /**
+     * Creates a new MCP server instance with the provided configuration.
+     * Subclasses should override this method to customize server creation.
+     */
+    protected abstract createServer(options: {
+        serverOptions?: CustomizableServerOptions<TContext>;
+        sessionOptions?: CustomizableSessionOptions;
+    }): Promise<TServer>;
 
     /**
      * Starts the transport runner.
@@ -62,16 +55,19 @@ export abstract class TransportRunnerBase<
     }): Promise<void>;
 
     /**
-     * Closes the transport.
+     * Stops the transport runner and releases any resources.
+     * This is called by `close()` and should be implemented by subclasses
+     * to handle transport-specific cleanup.
      */
-    abstract closeTransport(): Promise<void>;
+    abstract stop(): Promise<void>;
 
     /**
      * Closes the transport runner and cleans up resources.
+     * This calls `stop()` internally and also flushes the logger.
      */
     async close(): Promise<void> {
         try {
-            await this.closeTransport();
+            await this.stop();
         } finally {
             await this.logger.flush();
         }

@@ -1,13 +1,14 @@
 import type {
     ILogger,
     IMetrics,
+    ICounter,
     CloseableTransport,
     SessionCloseReason,
-    MetricDefinitions,
+    DefaultMetricDefinitions,
     ISessionStore,
     SessionStoreConstructorArgs,
 } from "@mongodb-js/mcp-types";
-import { LogId, setManagedTimeout } from "@mongodb-js/mcp-core";
+import { LogId, setManagedTimeout, type ManagedTimeout } from "@mongodb-js/mcp-core";
 
 export type { ISessionStore, SessionStoreConstructorArgs };
 
@@ -19,17 +20,17 @@ export class SessionStore<T extends CloseableTransport = CloseableTransport> imp
         [sessionId: string]: {
             logger: ILogger;
             transport: T;
-            abortTimeout: ReturnType<typeof setManagedTimeout>;
-            notificationTimeout: ReturnType<typeof setManagedTimeout>;
+            abortTimeout: ManagedTimeout;
+            notificationTimeout: ManagedTimeout;
         };
     } = {};
 
     private readonly idleTimeoutMS: number;
     private readonly notificationTimeoutMS: number;
     private readonly logger: ILogger;
-    private readonly metrics: IMetrics<MetricDefinitions>;
+    private readonly metrics: IMetrics<DefaultMetricDefinitions>;
 
-    constructor(params: SessionStoreConstructorArgs<MetricDefinitions>) {
+    constructor(params: SessionStoreConstructorArgs<DefaultMetricDefinitions>) {
         const { options, logger, metrics } = params;
         this.idleTimeoutMS = options.idleTimeoutMS;
         this.notificationTimeoutMS = options.notificationTimeoutMS;
@@ -106,8 +107,8 @@ export class SessionStore<T extends CloseableTransport = CloseableTransport> imp
         };
         // Track session created metric if available
         const sessionCreatedMetric = this.metrics.get("sessionCreated");
-        if (sessionCreatedMetric && typeof sessionCreatedMetric === "object" && "inc" in sessionCreatedMetric) {
-            (sessionCreatedMetric as { inc(): void }).inc();
+        if (sessionCreatedMetric) {
+            sessionCreatedMetric.inc();
         }
         return Promise.resolve();
     }
@@ -147,8 +148,8 @@ export class SessionStore<T extends CloseableTransport = CloseableTransport> imp
 
         // Track session closed metric if available
         const sessionClosedMetric = this.metrics.get("sessionClosed");
-        if (sessionClosedMetric && typeof sessionClosedMetric === "object" && "inc" in sessionClosedMetric) {
-            (sessionClosedMetric as { inc(labels?: Record<string, string>): void }).inc({ reason });
+        if (sessionClosedMetric) {
+            sessionClosedMetric.inc({ reason });
         }
     }
 
@@ -162,9 +163,8 @@ export class SessionStore<T extends CloseableTransport = CloseableTransport> imp
 /**
  * Creates a default SessionStore instance from the provided constructor arguments.
  */
-export function createDefaultSessionStore<
-    TTransport extends CloseableTransport = CloseableTransport,
-    TMetrics extends MetricDefinitions = MetricDefinitions,
->(params: SessionStoreConstructorArgs<TMetrics>): SessionStore<TTransport> {
-    return new SessionStore<TTransport>(params as SessionStoreConstructorArgs<MetricDefinitions>);
+export function createDefaultSessionStore<TTransport extends CloseableTransport = CloseableTransport>(
+    params: SessionStoreConstructorArgs<DefaultMetricDefinitions>
+): SessionStore<TTransport> {
+    return new SessionStore<TTransport>(params);
 }

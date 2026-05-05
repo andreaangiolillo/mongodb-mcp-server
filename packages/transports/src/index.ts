@@ -1,7 +1,6 @@
 // Core types and interfaces
 export type {
-    // Server Factory Types
-    ServerFactory,
+    // Server Options
     ServerOptions,
 
     // Transport Runner Configuration
@@ -16,6 +15,7 @@ export type {
     // Re-exports from mcp-types
     TransportRequestContext,
     MetricDefinitions,
+    DefaultMetricDefinitions,
 } from "./types.js";
 
 // Re-exports from mcp-types (transport config types moved there)
@@ -37,9 +37,13 @@ export type { StreamableHttpRunnerOptions } from "./streamableHttp.js";
 export { TransportRunnerBase } from "./base.js";
 
 // Concrete transport runners
-export { StdioRunner } from "./stdio.js";
+export { StdioRunner, type CreateServerFn as StdioCreateServerFn } from "./stdio.js";
 export { StreamableHttpRunner } from "./streamableHttp.js";
-export { DryRunModeRunner, type DryRunModeTestHelpers } from "./dryModeRunner.js";
+export {
+    DryRunModeRunner,
+    type DryRunModeTestHelpers,
+    type CreateServerFn as DryRunCreateServerFn,
+} from "./dryModeRunner.js";
 
 // HTTP Servers
 export { MCPHttpServer, createDefaultMcpHttpServer } from "./mcpHttpServer.js";

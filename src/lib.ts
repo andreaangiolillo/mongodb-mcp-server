@@ -40,13 +40,9 @@ export {
     StreamableHttpRunner,
     MCPHttpServer,
     createDefaultMcpHttpServer,
-    type MCPHttpServerConstructorArgs,
-    type CreateMcpHttpServerFn,
     MonitoringServer,
     createDefaultMonitoringServer,
     type StreamableHttpRunnerOptions as StreamableHttpTransportRunnerConfig,
-    type CreateMonitoringServerFn,
-    type MonitoringServerConstructorArgs,
     type MonitoringServerConfig,
 } from "@mongodb-js/mcp-transports";
 export type { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -56,7 +52,6 @@ export {
     type TransportRunnerBaseOptions as TransportRunnerConfig,
     type CustomizableServerOptions,
     type CustomizableSessionOptions,
-    type CreateServerFn as CreateSessionConfigFn,
     type TransportRequestContext,
 } from "@mongodb-js/mcp-transports";
 export {
@@ -97,7 +92,6 @@ export {
     SessionStore,
     createDefaultSessionStore,
     type ISessionStore,
-    type CreateSessionStoreFn,
     type SessionStoreConstructorArgs,
 } from "@mongodb-js/mcp-transports";
 export type { CloseableTransport, SessionCloseReason } from "@mongodb-js/mcp-types";

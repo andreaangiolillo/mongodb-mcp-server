@@ -1,14 +1,11 @@
 import type { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { MetricDefinitions, ISessionStore } from "@mongodb-js/mcp-types";
+import type { LoggerBase } from "@mongodb-js/mcp-core";
 import { LogId } from "@mongodb-js/mcp-core";
 import { TransportRunnerBase } from "./base.js";
 import { MCPHttpServer } from "./mcpHttpServer.js";
 import { MonitoringServer } from "./monitoringServer.js";
-import type {
-    CustomizableServerOptions,
-    CustomizableSessionOptions,
-    ServerFactory,
-} from "./types.js";
+import type { CustomizableServerOptions, CustomizableSessionOptions } from "./types.js";
 
 export { MonitoringServer, MCPHttpServer };
 
@@ -25,29 +22,9 @@ export {
 /**
  * Options for StreamableHttpRunner.
  */
-export type StreamableHttpRunnerOptions<
-    TServer = unknown,
-    TContext = unknown,
-    TMetrics extends MetricDefinitions = MetricDefinitions,
-> = {
-    /**
-     * Server factory for creating server instances.
-     */
-    serverFactory: ServerFactory<TServer, TContext, TMetrics>;
-
-    /**
-     * The MCP HTTP server instance.
-     * This is provided as a dependency for inversion of control.
-     */
-    mcpHttpServer: MCPHttpServer<TServer, TContext, TMetrics>;
-
-    /**
-     * Optional monitoring server instance.
-     */
-    monitoringServer?: MonitoringServer<TMetrics>;
-
+export type StreamableHttpRunnerOptions<TMetrics extends MetricDefinitions = MetricDefinitions> = {
     /** Optional loggers to use */
-    loggers?: import("@mongodb-js/mcp-types").ILogger[];
+    loggers?: LoggerBase[];
 
     /** Optional metrics instance */
     metrics?: import("@mongodb-js/mcp-types").IMetrics<TMetrics>;
@@ -56,7 +33,18 @@ export type StreamableHttpRunnerOptions<
 /**
  * Transport runner for HTTP transport with streamable responses.
  * Supports both SSE and JSON response types.
- * Servers are passed directly as dependencies instead of being created internally.
+ *
+ * To customize server creation, extend this class and override the `createServer()` method:
+ *
+ * @example
+ * ```typescript
+ * class MyStreamableHttpRunner extends StreamableHttpRunner {
+ *   protected override async createServer({ serverOptions, sessionOptions, request }) {
+ *     // Custom server creation logic
+ *     return new MyServer({ ... });
+ *   }
+ * }
+ * ```
  */
 export class StreamableHttpRunner<
     TServer extends {
@@ -71,32 +59,38 @@ export class StreamableHttpRunner<
     TContext = unknown,
     TMetrics extends MetricDefinitions = MetricDefinitions,
 > extends TransportRunnerBase<TServer, TContext, TMetrics> {
-    private mcpServer: MCPHttpServer<TServer, TContext, TMetrics>;
-    private readonly monitoringServer: MonitoringServer<TMetrics> | undefined;
+    protected mcpHttpServer: MCPHttpServer<TServer, TContext, TMetrics>;
+    protected monitoringServer: MonitoringServer<TMetrics> | undefined;
+    protected sessionStore: ISessionStore<StreamableHTTPServerTransport>;
 
     constructor({
-        serverFactory,
-        mcpHttpServer,
-        monitoringServer,
         loggers,
         metrics,
-    }: StreamableHttpRunnerOptions<TServer, TContext, TMetrics>) {
-        super({ serverFactory, loggers, metrics });
-
-        this.mcpServer = mcpHttpServer;
+        mcpHttpServer,
+        monitoringServer,
+        sessionStore,
+    }: StreamableHttpRunnerOptions<TMetrics> & {
+        mcpHttpServer: MCPHttpServer<TServer, TContext, TMetrics>;
+        monitoringServer?: MonitoringServer<TMetrics>;
+        sessionStore: ISessionStore<StreamableHTTPServerTransport>;
+    }) {
+        super({ loggers, metrics });
+        this.mcpHttpServer = mcpHttpServer;
         this.monitoringServer = monitoringServer;
+        this.sessionStore = sessionStore;
     }
 
     /** Starts the transport runner. */
     async start({
         serverOptions,
+        sessionOptions,
     }: {
         serverOptions?: CustomizableServerOptions<TContext>;
         sessionOptions?: CustomizableSessionOptions;
     } = {}): Promise<void> {
         this.validateConfig();
 
-        await this.mcpServer.start();
+        await this.mcpHttpServer.start();
 
         // Start the monitoring server if one exists
         await this.monitoringServer?.start();
@@ -108,8 +102,48 @@ export class StreamableHttpRunner<
         });
     }
 
-    async closeTransport(): Promise<void> {
-        await Promise.all([this.mcpServer?.stop(), this.monitoringServer?.stop()]);
+    /**
+     * Stops the HTTP transport runner.
+     * This stops the MCP HTTP server and monitoring server.
+     */
+    async stop(): Promise<void> {
+        await Promise.all([this.mcpHttpServer?.stop(), this.monitoringServer?.stop()]);
+    }
+
+    /**
+     * Creates a server instance. This method is required by the base class but
+     * is not used by StreamableHttpRunner since server creation happens inside
+     * MCPHttpServer. This stub implementation throws an error if called.
+     */
+    protected createServer({
+        serverOptions,
+        sessionOptions,
+    }: {
+        serverOptions?: CustomizableServerOptions<TContext>;
+        sessionOptions?: CustomizableSessionOptions;
+    }): Promise<TServer> {
+        throw new Error(
+            "StreamableHttpRunner.createServer() should not be called directly. " +
+                "Server creation is handled by the MCPHttpServer's createServer callback."
+        );
+    }
+
+    /**
+     * Creates a server instance for a specific request.
+     * Override this method in subclasses to customize per-request server creation.
+     */
+    protected createServerForRequest({
+        serverOptions,
+        sessionOptions,
+        request,
+    }: {
+        serverOptions?: CustomizableServerOptions<TContext>;
+        sessionOptions?: CustomizableSessionOptions;
+        request: import("@mongodb-js/mcp-types").TransportRequestContext;
+    }): Promise<TServer> {
+        // Default implementation just creates a regular server
+        // Subclasses can override to customize based on the request
+        return this.createServer({ serverOptions, sessionOptions });
     }
 
     private shouldWarnAboutHttpHost(httpHost: string): boolean {
@@ -120,7 +154,7 @@ export class StreamableHttpRunner<
 
     private validateConfig(): void {
         // Get the HTTP config from the mcp server to validate
-        const httpConfig = this.mcpServer.httpConfig;
+        const httpConfig = this.mcpHttpServer.httpConfig;
 
         // Check for potentially unsafe host binding
         if (this.shouldWarnAboutHttpHost(httpConfig.host)) {

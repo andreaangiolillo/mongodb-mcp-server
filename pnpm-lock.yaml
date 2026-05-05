@@ -47,6 +47,9 @@ importers:
       '@mongodb-js/mcp-tools-atlas-local':
         specifier: workspace:*
         version: link:packages/tools-atlas-local
+      '@mongodb-js/mcp-transports':
+        specifier: workspace:*
+        version: link:packages/transports
       '@mongodb-js/mcp-types':
         specifier: workspace:*
         version: link:packages/types

@@ -44,11 +44,30 @@ import * as fs from "fs/promises";
 import { parseUserConfig } from "./common/config/parseUserConfig.js";
 import { type UserConfig } from "./common/config/userConfig.js";
 import { packageInfo } from "./common/packageInfo.js";
-import { StdioRunner, StreamableHttpRunner } from "@mongodb-js/mcp-transports";
+import {
+    StdioRunner,
+    StreamableHttpRunner,
+    DryRunModeRunner,
+    MCPHttpServer,
+    MonitoringServer,
+    SessionStore,
+} from "@mongodb-js/mcp-transports";
+import type { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { systemCA } from "@mongodb-js/devtools-proxy-support";
-
-import { DryRunModeRunner } from "@mongodb-js/mcp-transports";
 import { runSetup } from "./setup/setupMcpServer.js";
+import { PrometheusMetrics, createDefaultMetrics } from "@mongodb-js/mcp-metrics";
+import type { IMetrics, MetricDefinitions } from "@mongodb-js/mcp-types";
+import { Server } from "./server.js";
+import { Session } from "./common/session.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { SetupTelemetry } from "./setup/setupTelemetry.js";
+import { Elicitation } from "./elicitation.js";
+import { connectionErrorHandler } from "./common/connectionErrorHandler.js";
+import { defaultCreateConnectionManager } from "./common/connectionManager.js";
+import { createAtlasLocalClient } from "@mongodb-js/mcp-tools-atlas-local";
+import { ApiClient } from "@mongodb-js/mcp-atlas-api-client";
+import { ExportsManager } from "./common/exportsManager.js";
+import { Keychain as CoreKeychain } from "@mongodb-js/mcp-core";
 
 async function main(): Promise<void> {
     systemCA().catch(() => undefined); // load system CA asynchronously as in mongosh
@@ -96,17 +115,70 @@ async function main(): Promise<void> {
     }
 
     const loggers = await createDefaultLoggers(config);
+    const metrics = new PrometheusMetrics({ definitions: createDefaultMetrics() });
 
-    const transportRunner =
-        config.transport === "stdio"
-            ? new StdioRunner({
-                  userConfig: config,
-                  loggers,
-              })
-            : new StreamableHttpRunner({
-                  userConfig: config,
-                  loggers,
-              });
+    let transportRunner: StdioRunner<Server> | StreamableHttpRunner<Server>;
+
+    if (config.transport === "stdio") {
+        transportRunner = new StdioRunner({
+            loggers,
+            metrics: metrics as IMetrics<MetricDefinitions>,
+            createServer: async () => {
+                return createServerForConfig(config, loggers[0], metrics);
+            },
+        });
+    } else {
+        const sessionStore = new SessionStore<StreamableHTTPServerTransport>({
+            options: {
+                idleTimeoutMS: 3600000,
+                notificationTimeoutMS: 3000000,
+            },
+            logger: loggers[0]!,
+            metrics: metrics as IMetrics<MetricDefinitions>,
+        });
+
+        const mcpHttpServer = new MCPHttpServer<Server>({
+            httpConfig: {
+                host: config.httpHost,
+                port: config.httpPort,
+                responseType: config.httpResponseType,
+                headers: config.httpHeaders,
+            },
+            sessionConfig: {
+                externallyManagedSessions: config.externallyManagedSessions,
+                idleTimeoutMS: 3600000,
+                notificationTimeoutMS: 3000000,
+            },
+            createServer: async () => {
+                return createServerForConfig(config, loggers[0], metrics);
+            },
+            logger: loggers[0]!,
+            metrics: metrics as IMetrics<MetricDefinitions>,
+            sessionStore,
+        });
+
+        let monitoringServer: MonitoringServer | undefined;
+        if (config.monitoringServerHost && config.monitoringServerPort) {
+            monitoringServer = new MonitoringServer({
+                config: {
+                    host: config.monitoringServerHost,
+                    port: config.monitoringServerPort,
+                    features: config.monitoringServerFeatures,
+                },
+                logger: loggers[0]!,
+                metrics: metrics as IMetrics<MetricDefinitions>,
+            });
+        }
+
+        transportRunner = new StreamableHttpRunner({
+            loggers,
+            metrics: metrics as IMetrics<MetricDefinitions>,
+            mcpHttpServer,
+            monitoringServer,
+            sessionStore,
+        });
+    }
+
     const shutdown = (): void => {
         transportRunner.logger.info({
             id: LogId.serverCloseRequested,
@@ -192,15 +264,20 @@ function handleVersionRequest(): never {
 
 export async function handleDryRunRequest(config: UserConfig): Promise<never> {
     try {
+        const metrics = new PrometheusMetrics({ definitions: createDefaultMetrics() });
         const runner = new DryRunModeRunner({
-            userConfig: config,
-            logger: {
-                log(message): void {
+            loggers: [],
+            metrics: metrics as IMetrics<MetricDefinitions>,
+            consoleLogger: {
+                log(message: string): void {
                     console.log(message);
                 },
-                error(message): void {
+                error(message: string): void {
                     console.error(message);
                 },
+            },
+            createServer: async () => {
+                return createServerForConfig(config, new ConsoleLogger({ keychain: Keychain.root }), metrics);
             },
         });
         await runner.start();
@@ -243,4 +320,63 @@ async function createDefaultLoggers(config: UserConfig): Promise<LoggerBase[]> {
     }
 
     return loggers;
+}
+
+async function createServerForConfig(
+    config: UserConfig,
+    logger: LoggerBase,
+    metrics: PrometheusMetrics<ReturnType<typeof createDefaultMetrics>>
+): Promise<Server> {
+    const keychain = CoreKeychain.root;
+    const exportsManager = new ExportsManager();
+    const connectionManager = await defaultCreateConnectionManager();
+
+    let apiClient: ApiClient | undefined;
+    // Check if credentials are available
+    if ((config as UserConfig & { publicKey?: string; privateKey?: string }).publicKey) {
+        apiClient = new ApiClient({
+            credentials: {
+                publicKey: (config as UserConfig & { publicKey?: string; privateKey?: string }).publicKey!,
+                privateKey: (config as UserConfig & { publicKey?: string; privateKey?: string }).privateKey!,
+            },
+        });
+    }
+
+    const atlasLocalClient = await createAtlasLocalClient({ logger, loader: async () => ({}) });
+
+    const telemetry = new SetupTelemetry({
+        userConfig: config,
+        logger,
+        keychain,
+    });
+
+    const elicitation = new Elicitation(logger);
+
+    const session = new Session({
+        userConfig: config,
+        logger,
+        exportsManager,
+        connectionManager,
+        keychain,
+        apiClient: apiClient!, // session requires this but we may not have it
+        connectionErrorHandler,
+        atlasLocalClient,
+    });
+
+    const mcpServer = new McpServer({
+        name: "mongodb-mcp-server",
+        version: packageInfo.version,
+    });
+
+    const server = new Server({
+        session,
+        userConfig: config,
+        mcpServer,
+        telemetry,
+        connectionErrorHandler,
+        elicitation,
+        metrics: metrics as PrometheusMetrics<ReturnType<typeof createDefaultMetrics>>,
+    });
+
+    return server;
 }

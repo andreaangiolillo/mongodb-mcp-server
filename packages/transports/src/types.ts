@@ -1,12 +1,12 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { ILogger, ICompositeLogger, IKeychain } from "@mongodb-js/mcp-types";
+import type { ICompositeLogger, IKeychain } from "@mongodb-js/mcp-types";
 import type { IMetrics, MetricDefinitions } from "@mongodb-js/mcp-types";
 import type { TransportRequestContext } from "@mongodb-js/mcp-types";
-import type { LogLevel } from "@mongodb-js/mcp-core";
+import type { LogLevel, LoggerBase } from "@mongodb-js/mcp-core";
 
 /**
  * Options for creating an MCP server instance.
- * Decoupled from UserConfig to allow flexible configuration.
+ * Passed to the `createServer()` method in transport runners.
  */
 export type ServerOptions<TContext = unknown, TMetrics extends MetricDefinitions = MetricDefinitions> = {
     /** MCP Server instance */
@@ -47,41 +47,14 @@ export type SessionOptions = {
 };
 
 /**
- * Factory interface for creating server instances.
- * This decouples the transports from the concrete Server class.
- */
-export interface ServerFactory<
-    TServer = unknown,
-    TContext = unknown,
-    TMetrics extends MetricDefinitions = MetricDefinitions,
-> {
-    /**
-     * Creates a server instance for stdio transport.
-     */
-    createServer(options: ServerOptions<TContext, TMetrics>): Promise<TServer>;
-
-    /**
-     * Creates a server instance for a specific HTTP request.
-     */
-    createServerForRequest?(
-        options: ServerOptions<TContext, TMetrics> & { request: TransportRequestContext }
-    ): Promise<TServer>;
-}
-
-/**
  * Base configuration options for all transport runners.
  */
 export type TransportRunnerBaseOptions<TMetrics extends MetricDefinitions = MetricDefinitions> = {
-    /**
-     * Server factory for creating server instances.
-     */
-    serverFactory: ServerFactory<unknown, unknown, TMetrics>;
-
     /** Optional metrics instance */
     metrics?: IMetrics<TMetrics>;
 
     /** Optional loggers to use */
-    loggers?: ILogger[];
+    loggers?: LoggerBase[];
 };
 
 /**
@@ -104,6 +77,7 @@ export type DryRunModeRunnerOptions<TMetrics extends MetricDefinitions = MetricD
 
 /**
  * Options that can be customized when starting a runner.
+ * Passed to the `start()` method and forwarded to `createServer()`.
  */
 export type CustomizableServerOptions<TContext = unknown> = {
     /** Custom tool context */
@@ -126,4 +100,4 @@ export type CustomizableSessionOptions = {
     connectionErrorHandler?: unknown;
 };
 
-export type { TransportRequestContext, MetricDefinitions } from "@mongodb-js/mcp-types";
+export type { TransportRequestContext, MetricDefinitions, DefaultMetricDefinitions } from "@mongodb-js/mcp-types";
