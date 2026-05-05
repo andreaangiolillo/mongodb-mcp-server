@@ -44,21 +44,21 @@ export {
     type CreateMcpHttpServerFn,
     MonitoringServer,
     createDefaultMonitoringServer,
-    type StreamableHttpTransportRunnerConfig,
+    type StreamableHttpRunnerOptions as StreamableHttpTransportRunnerConfig,
     type CreateMonitoringServerFn,
     type MonitoringServerConstructorArgs,
     type MonitoringServerConfig,
-} from "./transports/streamableHttp.js";
+} from "@mongodb-js/mcp-transports";
 export type { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-export { StdioRunner } from "./transports/stdio.js";
+export { StdioRunner } from "@mongodb-js/mcp-transports";
 export {
     TransportRunnerBase,
-    type TransportRunnerConfig,
+    type TransportRunnerBaseOptions as TransportRunnerConfig,
     type CustomizableServerOptions,
     type CustomizableSessionOptions,
-    type CreateSessionConfigFn,
+    type CreateServerFn as CreateSessionConfigFn,
     type TransportRequestContext,
-} from "./transports/base.js";
+} from "@mongodb-js/mcp-transports";
 export {
     ConnectionManager,
     ConnectionStateConnected,
@@ -97,11 +97,10 @@ export {
     SessionStore,
     createDefaultSessionStore,
     type ISessionStore,
-    type CloseableTransport,
-    type SessionCloseReason,
     type CreateSessionStoreFn,
     type SessionStoreConstructorArgs,
-} from "./common/sessionStore.js";
+} from "@mongodb-js/mcp-transports";
+export type { CloseableTransport, SessionCloseReason } from "@mongodb-js/mcp-types";
 export { ExportsManager } from "./common/exportsManager.js";
 export { DeviceId } from "./helpers/deviceId.js";
 export type { MonitoringServerFeature } from "./common/schemas.js";

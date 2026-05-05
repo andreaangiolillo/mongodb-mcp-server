@@ -1,5 +1,6 @@
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import type { MetricDefinitions } from "@mongodb-js/mcp-types";
+import { LogId } from "@mongodb-js/mcp-core";
 import { TransportRunnerBase } from "./base.js";
 import type {
     StdioRunnerOptions,
@@ -45,7 +46,7 @@ export class StdioRunner<
             await this.server.connect(transport);
         } catch (error: unknown) {
             this.logger.emergency({
-                id: { __value: 10015 }, // LogId.serverStartFailure
+                id: LogId.serverStartFailure,
                 context: "server",
                 message: `Fatal error running server: ${error as string}`,
             });

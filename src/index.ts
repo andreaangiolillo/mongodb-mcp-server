@@ -44,11 +44,10 @@ import * as fs from "fs/promises";
 import { parseUserConfig } from "./common/config/parseUserConfig.js";
 import { type UserConfig } from "./common/config/userConfig.js";
 import { packageInfo } from "./common/packageInfo.js";
-import { StdioRunner } from "./transports/stdio.js";
-import { StreamableHttpRunner } from "./transports/streamableHttp.js";
+import { StdioRunner, StreamableHttpRunner } from "@mongodb-js/mcp-transports";
 import { systemCA } from "@mongodb-js/devtools-proxy-support";
 
-import { DryRunModeRunner } from "./transports/dryModeRunner.js";
+import { DryRunModeRunner } from "@mongodb-js/mcp-transports";
 import { runSetup } from "./setup/setupMcpServer.js";
 
 async function main(): Promise<void> {

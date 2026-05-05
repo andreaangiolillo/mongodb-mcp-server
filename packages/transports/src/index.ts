@@ -3,33 +3,11 @@ export type {
     // Server Factory Types
     ServerFactory,
     ServerOptions,
-    CreateServerFn,
-    CreateServerForRequestFn,
 
     // Transport Runner Configuration
     TransportRunnerBaseOptions,
     StdioRunnerOptions,
-    StreamableHttpRunnerOptions,
     DryRunModeRunnerOptions,
-
-    // HTTP Server Configuration
-    HttpServerConfig,
-    MonitoringServerConfig,
-    SessionManagementConfig,
-    MonitoringServerFeature,
-
-    // MCP HTTP Server Types
-    MCPHttpServerConstructorArgs,
-    CreateMcpHttpServerFn,
-
-    // Monitoring Server Types
-    MonitoringServerConstructorArgs,
-    CreateMonitoringServerFn,
-
-    // Session Store Types
-    ISessionStore,
-    SessionStoreConstructorArgs,
-    CreateSessionStoreFn,
 
     // Customizable Options
     CustomizableServerOptions,
@@ -37,10 +15,23 @@ export type {
 
     // Re-exports from mcp-types
     TransportRequestContext,
-    CloseableTransport,
-    SessionCloseReason,
     MetricDefinitions,
 } from "./types.js";
+
+// Re-exports from mcp-types (transport config types moved there)
+export type {
+    HttpServerConfig,
+    MonitoringServerConfig,
+    SessionManagementConfig,
+    MonitoringServerFeature,
+    ISessionStore,
+    SessionStoreConstructorArgs,
+    CloseableTransport,
+    SessionCloseReason,
+} from "@mongodb-js/mcp-types";
+
+// Re-export StreamableHttpRunnerOptions from streamableHttp.ts
+export type { StreamableHttpRunnerOptions } from "./streamableHttp.js";
 
 // Base transport runner
 export { TransportRunnerBase } from "./base.js";

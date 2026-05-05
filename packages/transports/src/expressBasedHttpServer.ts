@@ -1,6 +1,7 @@
 import express from "express";
 import type http from "http";
 import type { ILogger } from "@mongodb-js/mcp-types";
+import { LogId } from "@mongodb-js/mcp-core";
 
 export type ExpressConfig = {
     port: number;
@@ -59,7 +60,7 @@ export abstract class ExpressBasedHttpServer {
             message: `Http server started on address: ${this.serverAddress}`,
             context: this.logContext,
             noRedaction: true,
-            id: { __value: 10001 }, // LogId.httpServerStarted
+            id: LogId.httpServerStarted,
         });
     }
 
@@ -68,7 +69,7 @@ export abstract class ExpressBasedHttpServer {
             this.logger.info({
                 message: "Stopping server...",
                 context: this.logContext,
-                id: { __value: 10002 }, // LogId.httpServerStopping
+                id: LogId.httpServerStopping,
             });
 
             const server = this.httpServer;
@@ -85,13 +86,13 @@ export abstract class ExpressBasedHttpServer {
             this.logger.info({
                 message: "Server stopped",
                 context: this.logContext,
-                id: { __value: 10003 }, // LogId.httpServerStopped
+                id: LogId.httpServerStopped,
             });
         } else {
             this.logger.info({
                 message: "Server is not running",
                 context: this.logContext,
-                id: { __value: 10003 }, // LogId.httpServerStopped
+                id: LogId.httpServerStopped,
             });
         }
     }

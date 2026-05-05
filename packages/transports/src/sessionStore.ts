@@ -4,45 +4,12 @@ import type {
     CloseableTransport,
     SessionCloseReason,
     MetricDefinitions,
+    ISessionStore,
+    SessionStoreConstructorArgs,
 } from "@mongodb-js/mcp-types";
-import type { ISessionStore, SessionStoreConstructorArgs, CreateSessionStoreFn } from "./types.js";
+import { LogId, setManagedTimeout } from "@mongodb-js/mcp-core";
 
-export type { ISessionStore, SessionStoreConstructorArgs, CreateSessionStoreFn };
-
-/**
- * A managed timeout that can be restarted or canceled.
- */
-interface ManagedTimeout {
-    restart(): void;
-    cancel(): void;
-}
-
-function setManagedTimeout(callback: () => void | Promise<void>, delay: number): ManagedTimeout {
-    let timeoutId: NodeJS.Timeout | undefined;
-
-    function start(): void {
-        timeoutId = setTimeout(() => {
-            void callback();
-        }, delay);
-    }
-
-    function cancel(): void {
-        if (timeoutId) {
-            clearTimeout(timeoutId);
-            timeoutId = undefined;
-        }
-    }
-
-    start();
-
-    return {
-        restart: (): void => {
-            cancel();
-            start();
-        },
-        cancel,
-    };
-}
+export type { ISessionStore, SessionStoreConstructorArgs };
 
 /**
  * Default in-memory session store implementation.
@@ -52,8 +19,8 @@ export class SessionStore<T extends CloseableTransport = CloseableTransport> imp
         [sessionId: string]: {
             logger: ILogger;
             transport: T;
-            abortTimeout: ManagedTimeout;
-            notificationTimeout: ManagedTimeout;
+            abortTimeout: ReturnType<typeof setManagedTimeout>;
+            notificationTimeout: ReturnType<typeof setManagedTimeout>;
         };
     } = {};
 
@@ -98,14 +65,14 @@ export class SessionStore<T extends CloseableTransport = CloseableTransport> imp
         const session = this.sessions[sessionId];
         if (!session) {
             this.logger.warning({
-                id: { __value: 10004 }, // LogId.streamableHttpTransportSessionCloseNotificationFailure
+                id: LogId.sessionStoreNotificationFailure,
                 context: "sessionStore",
                 message: `session ${sessionId} not found, no notification delivered`,
             });
             return;
         }
         session.logger.info({
-            id: { __value: 10005 }, // LogId.streamableHttpTransportSessionCloseNotification
+            id: LogId.sessionStoreSessionClosed,
             context: "sessionStore",
             message: "Session is about to be closed due to inactivity",
         });
@@ -120,7 +87,7 @@ export class SessionStore<T extends CloseableTransport = CloseableTransport> imp
         const abortTimeout = setManagedTimeout(async () => {
             if (this.sessions[sessionId]) {
                 this.sessions[sessionId].logger.info({
-                    id: { __value: 10005 }, // LogId.streamableHttpTransportSessionCloseNotification
+                    id: LogId.sessionStoreSessionClosed,
                     context: "sessionStore",
                     message: "Session closed due to inactivity",
                 });
@@ -171,7 +138,7 @@ export class SessionStore<T extends CloseableTransport = CloseableTransport> imp
                 await session.transport.close();
             } catch (error) {
                 this.logger.error({
-                    id: { __value: 10006 }, // LogId.streamableHttpTransportSessionCloseFailure
+                    id: LogId.streamableHttpTransportSessionCloseFailure,
                     context: "streamableHttpTransport",
                     message: `Error closing transport ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
                 });

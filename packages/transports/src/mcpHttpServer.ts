@@ -8,6 +8,7 @@ import type {
     MetricDefinitions,
     TransportRequestContext,
 } from "@mongodb-js/mcp-types";
+import { LogId } from "@mongodb-js/mcp-core";
 import { ExpressBasedHttpServer } from "./expressBasedHttpServer.js";
 import {
     JSON_RPC_ERROR_CODE_SESSION_ID_REQUIRED,
@@ -21,6 +22,8 @@ import type {
     ISessionStore,
     HttpServerConfig,
     SessionManagementConfig,
+} from "@mongodb-js/mcp-types";
+import type {
     ServerFactory,
     ServerOptions,
 } from "./types.js";
@@ -68,8 +71,8 @@ export class MCPHttpServer<
 > extends ExpressBasedHttpServer {
     private readonly sessionStore: ISessionStore<StreamableHTTPServerTransport>;
     private readonly serverOptions?: ServerOptions<TContext, TMetrics>;
-    protected readonly httpConfig: HttpServerConfig;
-    protected readonly sessionConfig: SessionManagementConfig;
+    public readonly httpConfig: HttpServerConfig;
+    public readonly sessionConfig: SessionManagementConfig;
     private readonly metrics: IMetrics<TMetrics>;
     private readonly serverFactory: ServerFactory<TServer, TContext, TMetrics>;
     private readonly pendingInitializations = new Map<string, Promise<void>>();
@@ -149,7 +152,7 @@ export class MCPHttpServer<
         const keepAliveLoop = setInterval(async () => {
             try {
                 server.session?.logger.debug({
-                    id: { __value: 10008 }, // LogId.streamableHttpTransportKeepAlive
+                    id: LogId.streamableHttpTransportKeepAlive,
                     context: "streamableHttpTransport",
                     message: "Sending ping",
                 });
@@ -163,7 +166,7 @@ export class MCPHttpServer<
                 try {
                     failedPings++;
                     server.session?.logger.warning({
-                        id: { __value: 10009 }, // LogId.streamableHttpTransportKeepAliveFailure
+                        id: LogId.streamableHttpTransportKeepAliveFailure,
                         context: "streamableHttpTransport",
                         message: `Error sending ping (attempt #${failedPings}): ${err instanceof Error ? err.message : String(err)}`,
                     });
@@ -216,7 +219,7 @@ export class MCPHttpServer<
         const pendingInit = this.pendingInitializations.get(sessionId);
         if (pendingInit) {
             this.logger.debug({
-                id: { __value: 10010 }, // LogId.streamableHttpTransportSessionNotFound
+                id: LogId.streamableHttpTransportSessionNotFound,
                 context: "streamableHttpTransport",
                 message: `Session with ID ${sessionId} is already being initialized, waiting`,
             });
@@ -230,7 +233,7 @@ export class MCPHttpServer<
         }
 
         this.logger.debug({
-            id: { __value: 10010 }, // LogId.streamableHttpTransportSessionNotFound
+            id: LogId.streamableHttpTransportSessionNotFound,
             context: "streamableHttpTransport",
             message: `Session with ID ${sessionId} not found, initializing new session`,
         });
@@ -259,7 +262,7 @@ export class MCPHttpServer<
                         await this.sessionStore.closeSession({ sessionId: sid, reason: "transport_closed" });
                     } catch (error) {
                         this.logger.error({
-                            id: { __value: 10011 }, // LogId.streamableHttpTransportSessionCloseFailure
+                            id: LogId.streamableHttpTransportSessionCloseFailure,
                             context: "streamableHttpTransport",
                             message: `Error closing session ${sid}: ${error instanceof Error ? error.message : String(error)}`,
                         });
@@ -292,7 +295,7 @@ export class MCPHttpServer<
                 const serverWithClose = server as { close(): Promise<void> };
                 serverWithClose.close?.().catch((error: unknown) => {
                     this.logger.error({
-                        id: { __value: 10012 }, // LogId.streamableHttpTransportCloseFailure
+                        id: LogId.streamableHttpTransportCloseFailure,
                         context: "streamableHttpTransport",
                         message: `Error closing server: ${error instanceof Error ? error.message : String(error)}`,
                     });
@@ -314,7 +317,7 @@ export class MCPHttpServer<
             await initPromise;
         } catch (error) {
             this.logger.error({
-                id: { __value: 10013 }, // LogId.streamableHttpTransportRequestFailure
+                id: LogId.streamableHttpTransportRequestFailure,
                 context: "streamableHttpTransport",
                 message: `Failed to initialize session ${sessionId}: ${error instanceof Error ? error.message : String(error)}`,
             });
@@ -369,7 +372,7 @@ export class MCPHttpServer<
             if (!transport) {
                 if (!this.sessionConfig.externallyManagedSessions) {
                     this.logger.debug({
-                        id: { __value: 10010 }, // LogId.streamableHttpTransportSessionNotFound
+                        id: LogId.streamableHttpTransportSessionNotFound,
                         context: "streamableHttpTransport",
                         message: `Session with ID ${sessionId} not found`,
                     });
@@ -401,7 +404,7 @@ export class MCPHttpServer<
                 if (isInitializeRequest(req.body)) {
                     if (sessionId && !this.sessionConfig.externallyManagedSessions) {
                         this.logger.debug({
-                            id: { __value: 10014 }, // LogId.streamableHttpTransportDisallowedExternalSessionError
+                            id: LogId.streamableHttpTransportDisallowedExternalSessionError,
                             context: "streamableHttpTransport",
                             message: `Client provided session ID ${sessionId}, but externallyManagedSessions is disabled`,
                         });
@@ -450,7 +453,7 @@ export class MCPHttpServer<
         return (req: express.Request, res: express.Response, next: express.NextFunction): void => {
             fn(req, res, next).catch((error) => {
                 this.logger.error({
-                    id: { __value: 10013 }, // LogId.streamableHttpTransportRequestFailure
+                    id: LogId.streamableHttpTransportRequestFailure,
                     context: "streamableHttpTransport",
                     message: `Error handling request: ${error instanceof Error ? error.message : String(error)}`,
                 });

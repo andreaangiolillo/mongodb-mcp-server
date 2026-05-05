@@ -1,7 +1,7 @@
 import type express from "express";
-import type { ILogger, IMetrics, MetricDefinitions } from "@mongodb-js/mcp-types";
+import type { ILogger, IMetrics, MetricDefinitions, MonitoringServerFeature } from "@mongodb-js/mcp-types";
+import { LogId } from "@mongodb-js/mcp-core";
 import { ExpressBasedHttpServer } from "./expressBasedHttpServer.js";
-import type { MonitoringServerFeature } from "./types.js";
 
 /**
  * Constructor arguments for creating a MonitoringServer instance.
@@ -50,7 +50,7 @@ export class MonitoringServer<TMetrics extends MetricDefinitions = MetricDefinit
                     res.send(output);
                 } catch (error: unknown) {
                     this.logger.error({
-                        id: { __value: 10007 }, // LogId.monitoringServerMetricsFailure
+                        id: LogId.monitoringServerMetricsFailure,
                         context: "monitoringServer",
                         message: `Failed to retrieve metrics: ${String(error)}`,
                     });
