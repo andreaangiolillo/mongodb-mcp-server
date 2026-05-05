@@ -88,12 +88,7 @@ export { Keychain, registerGlobalSecretToRedact } from "@mongodb-js/mcp-core";
 export type { Secret } from "mongodb-redact";
 export { Elicitation } from "./elicitation.js";
 export { applyConfigOverrides, ConfigOverrideError } from "./common/config/configOverrides.js";
-export {
-    SessionStore,
-    createDefaultSessionStore,
-    type ISessionStore,
-    type SessionStoreConstructorArgs,
-} from "@mongodb-js/mcp-transports";
+export { SessionStore, type ISessionStore, type SessionStoreConstructorArgs } from "@mongodb-js/mcp-transports";
 export type { CloseableTransport, SessionCloseReason } from "@mongodb-js/mcp-types";
 export { ExportsManager } from "./common/exportsManager.js";
 export { DeviceId } from "./helpers/deviceId.js";

@@ -53,7 +53,7 @@ export { MonitoringServer, createDefaultMonitoringServer } from "./monitoringSer
 export { ExpressBasedHttpServer, type ExpressConfig } from "./expressBasedHttpServer.js";
 
 // Session Store
-export { SessionStore, createDefaultSessionStore } from "./sessionStore.js";
+export { SessionStore } from "./sessionStore.js";
 
 // In-Memory Transport
 export { InMemoryTransport } from "./inMemoryTransport.js";

@@ -105,11 +105,8 @@ export class SessionStore<T extends CloseableTransport = CloseableTransport> imp
             notificationTimeout,
             logger,
         };
-        // Track session created metric if available
-        const sessionCreatedMetric = this.metrics.get("sessionCreated");
-        if (sessionCreatedMetric) {
-            sessionCreatedMetric.inc();
-        }
+        // Track session created metric
+        this.metrics.get("sessionCreated").inc();
         return Promise.resolve();
     }
 
@@ -146,11 +143,8 @@ export class SessionStore<T extends CloseableTransport = CloseableTransport> imp
             }
         }
 
-        // Track session closed metric if available
-        const sessionClosedMetric = this.metrics.get("sessionClosed");
-        if (sessionClosedMetric) {
-            sessionClosedMetric.inc({ reason });
-        }
+        // Track session closed metric
+        this.metrics.get("sessionClosed").inc({ reason });
     }
 
     async closeAllSessions(): Promise<void> {
@@ -158,13 +152,4 @@ export class SessionStore<T extends CloseableTransport = CloseableTransport> imp
             Object.keys(this.sessions).map((sessionId) => this.closeSession({ sessionId, reason: "server_stop" }))
         );
     }
-}
-
-/**
- * Creates a default SessionStore instance from the provided constructor arguments.
- */
-export function createDefaultSessionStore<TTransport extends CloseableTransport = CloseableTransport>(
-    params: SessionStoreConstructorArgs<DefaultMetricDefinitions>
-): SessionStore<TTransport> {
-    return new SessionStore<TTransport>(params);
 }

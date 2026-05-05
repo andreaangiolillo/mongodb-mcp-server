@@ -35,11 +35,11 @@ export interface ICounter {
  */
 export type DefaultMetricDefinitions = MetricDefinitions & {
     /** Counter for tracking created sessions */
-    sessionCreated?: ICounter;
+    sessionCreated: ICounter;
     /** Counter for tracking closed sessions with reason label */
-    sessionClosed?: ICounter;
+    sessionClosed: ICounter;
     /** Histogram for tracking tool execution duration in seconds */
-    toolExecutionDuration?: IObservable;
+    toolExecutionDuration: IObservable;
 };
 
 /**
