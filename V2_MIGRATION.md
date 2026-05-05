@@ -243,28 +243,86 @@ The HTTP server implementations are now available from the new package:
 + import { MCPHttpServer, MonitoringServer } from "@mongodb-js/mcp-transports";
 ```
 
-Both servers now accept typed configuration options instead of `UserConfig`:
+#### MCPHttpServer - Inheritance Pattern (Breaking Change)
+
+**BREAKING CHANGE:** `MCPHttpServer` no longer accepts a `createServer` callback in its constructor. Instead, you must extend the class and override the `createServer()` method:
+
+**Before:**
 
 ```typescript
-import {
-  MCPHttpServer,
-  createDefaultMcpHttpServer,
-} from "@mongodb-js/mcp-transports";
+import { MCPHttpServer } from "@mongodb-js/mcp-transports";
 
-const httpServer = createDefaultMcpHttpServer({
-  httpConfig: { host, port, bodyLimit, headers, responseType },
-  sessionConfig: {
-    idleTimeoutMs,
-    notificationTimeoutMs,
-    externallyManagedSessions,
+const httpServer = new MCPHttpServer({
+  httpOptions: { host, port, bodyLimit, headers, responseType },
+  sessionOptions: { idleTimeoutMs, notificationTimeoutMs, externallyManagedSessions },
+  createServer: async () => {
+    // Create server instance
+    return new MyServer({ ... });
   },
-  serverFactory,
   logger,
   metrics,
   sessionStore,
-  serverOptions,
 });
 ```
+
+**After:**
+
+```typescript
+import { MCPHttpServer } from "@mongodb-js/mcp-transports";
+
+class MyMCPHttpServer extends MCPHttpServer<MyServer> {
+  private userConfig: UserConfig;
+  private logger: CompositeLogger;
+
+  constructor(options: {
+    userConfig: UserConfig;
+    httpOptions: HttpServerConfig;
+    sessionOptions: SessionManagementConfig;
+    logger: CompositeLogger;
+    metrics: IMetrics<DefaultMetricDefinitions>;
+    sessionStore: ISessionStore<StreamableHTTPServerTransport>;
+  }) {
+    super(options);
+    this.userConfig = options.userConfig;
+    this.logger = options.logger;
+  }
+
+  protected override async createServer(): Promise<MyServer> {
+    // Create and return your server instance
+    return new MyServer({
+      userConfig: this.userConfig,
+      logger: this.logger,
+      // ... other options
+    });
+  }
+}
+
+const httpServer = new MyMCPHttpServer({
+  userConfig,
+  httpOptions: { host, port, bodyLimit, headers, responseType },
+  sessionOptions: { idleTimeoutMs, notificationTimeoutMs, externallyManagedSessions },
+  logger,
+  metrics,
+  sessionStore,
+});
+```
+
+#### Type Renames
+
+| Old name | New name |
+|----------|----------|
+| `MCPHttpServerConstructorArgs` | `MCPHttpServerOptions` |
+| `MonitoringServerConstructorArgs` | `MonitoringServerOptions` |
+| `httpConfig` | `httpOptions` |
+| `sessionConfig` | `sessionOptions` |
+
+#### Removed Factory Functions
+
+The following factory functions have been removed. Use `new ClassName()` directly:
+
+- `createDefaultMcpHttpServer()` - Use `new MCPHttpServer()` 
+- `createDefaultMonitoringServer()` - Use `new MonitoringServer()`
+- `createDefaultSessionStore()` - Use `new SessionStore()`
 
 ### Session Store
 
