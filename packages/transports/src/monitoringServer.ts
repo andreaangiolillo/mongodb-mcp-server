@@ -4,32 +4,42 @@ import { LogId } from "@mongodb-js/mcp-core";
 import { ExpressBasedHttpServer } from "./expressBasedHttpServer.js";
 
 /**
- * Constructor arguments for creating a MonitoringServer instance.
+ * Options for creating a MonitoringServer instance.
  */
-export type MonitoringServerConstructorArgs<TMetrics extends MetricDefinitions = MetricDefinitions> = {
+export type MonitoringServerOptions<TMetrics extends MetricDefinitions = MetricDefinitions> = {
+    /** Host to bind the monitoring server to */
     host: string;
+    /** Port to bind the monitoring server to */
     port: number;
+    /** Features to enable on the monitoring server */
     features: MonitoringServerFeature[];
+    /** Logger for the server */
     logger: ILogger;
+    /** Metrics instance */
     metrics: IMetrics<TMetrics>;
 };
 
 /**
- * A function to create a custom MonitoringServer instance.
- * When provided, the runner will use this function instead of the default MonitoringServer constructor.
- */
-export type CreateMonitoringServerFn<TMetrics extends MetricDefinitions = MetricDefinitions> = (
-    args: MonitoringServerConstructorArgs<TMetrics>
-) => MonitoringServer<TMetrics> | undefined;
-
-/**
  * HTTP server that provides monitoring endpoints like health checks and metrics.
+ *
+ * To customize behavior, extend this class and override methods:
+ *
+ * @example
+ * ```typescript
+ * class MyMonitoringServer extends MonitoringServer {
+ *   protected override async setupRoutes(): Promise<void> {
+ *     // Add custom routes
+ *     this.app.get("/custom", (req, res) => res.json({ custom: true }));
+ *     await super.setupRoutes();
+ *   }
+ * }
+ * ```
  */
 export class MonitoringServer<TMetrics extends MetricDefinitions = MetricDefinitions> extends ExpressBasedHttpServer {
     private readonly features: MonitoringServerFeature[];
     private readonly metrics: IMetrics<TMetrics>;
 
-    constructor({ host, port, features, logger, metrics }: MonitoringServerConstructorArgs<TMetrics>) {
+    constructor({ host, port, features, logger, metrics }: MonitoringServerOptions<TMetrics>) {
         super({ port, hostname: host, logger, logContext: "monitoringServer" });
         this.features = features;
         this.metrics = metrics;
@@ -62,12 +72,3 @@ export class MonitoringServer<TMetrics extends MetricDefinitions = MetricDefinit
         return Promise.resolve();
     }
 }
-
-/**
- * Creates a default MonitoringServer instance from the provided constructor arguments.
- */
-export const createDefaultMonitoringServer: <TMetrics extends MetricDefinitions = MetricDefinitions>(
-    args: MonitoringServerConstructorArgs<TMetrics>
-) => MonitoringServer<TMetrics> = <TMetrics extends MetricDefinitions = MetricDefinitions>(
-    args: MonitoringServerConstructorArgs<TMetrics>
-) => new MonitoringServer<TMetrics>(args);

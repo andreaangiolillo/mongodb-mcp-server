@@ -23,56 +23,17 @@ import {
 } from "./jsonRpcErrorCodes.js";
 
 /**
- * Function type for creating a server instance.
+ * Options for creating an MCPHttpServer instance.
  */
-export type CreateServerFn<
-    TServer = unknown,
-    TContext = unknown,
-    TMetrics extends MetricDefinitions = MetricDefinitions,
-> = (options?: {
-    serverOptions?: { toolContext?: TContext; telemetryProperties?: Record<string, string> };
-    sessionOptions?: {
-        apiClient?: unknown;
-        atlasLocalClient?: unknown;
-        connectionManager?: unknown;
-        connectionErrorHandler?: unknown;
-    };
-}) => Promise<TServer>;
-
-/**
- * Function type for creating a server instance for a specific request.
- */
-export type CreateServerForRequestFn<
-    TServer = unknown,
-    TContext = unknown,
-    TMetrics extends MetricDefinitions = MetricDefinitions,
-> = (options: {
-    serverOptions?: { toolContext?: TContext; telemetryProperties?: Record<string, string> };
-    sessionOptions?: {
-        apiClient?: unknown;
-        atlasLocalClient?: unknown;
-        connectionManager?: unknown;
-        connectionErrorHandler?: unknown;
-    };
-    request: TransportRequestContext;
-}) => Promise<TServer>;
-
-/**
- * Constructor arguments for creating an MCPHttpServer instance.
- */
-export type MCPHttpServerConstructorArgs<
+export type MCPHttpServerOptions<
     TServer = unknown,
     TContext = unknown,
     TMetrics extends MetricDefinitions = MetricDefinitions,
 > = {
     /** HTTP server configuration */
-    httpConfig: HttpServerConfig;
+    httpOptions: HttpServerConfig;
     /** Session management configuration */
-    sessionConfig: SessionManagementConfig;
-    /** Function to create server instances */
-    createServer: CreateServerFn<TServer, TContext, TMetrics>;
-    /** Optional function to create server for a specific request */
-    createServerForRequest?: CreateServerForRequestFn<TServer, TContext, TMetrics>;
+    sessionOptions: SessionManagementConfig;
     /** Logger for the server */
     logger: ICompositeLogger;
     /** Metrics instance */
@@ -83,6 +44,17 @@ export type MCPHttpServerConstructorArgs<
 
 /**
  * HTTP server that handles MCP requests over HTTP using the Streamable HTTP transport.
+ *
+ * To customize server creation, extend this class and override the `createServer()` method:
+ *
+ * @example
+ * ```typescript
+ * class MyMCPHttpServer extends MCPHttpServer {
+ *   protected override async createServer(): Promise<MyServer> {
+ *     return new MyServer({ ... });
+ *   }
+ * }
+ * ```
  */
 export class MCPHttpServer<
     TServer = unknown,
@@ -92,36 +64,47 @@ export class MCPHttpServer<
     private readonly sessionStore: ISessionStore<StreamableHTTPServerTransport>;
     public readonly httpConfig: HttpServerConfig;
     public readonly sessionConfig: SessionManagementConfig;
-    private readonly metrics: IMetrics<TMetrics>;
-    private readonly createServer: CreateServerFn<TServer, TContext, TMetrics>;
-    private readonly createServerForRequest?: CreateServerForRequestFn<TServer, TContext, TMetrics>;
+    protected readonly metrics: IMetrics<TMetrics>;
     private readonly pendingInitializations = new Map<string, Promise<void>>();
 
     constructor({
-        httpConfig,
-        sessionConfig,
-        createServer,
-        createServerForRequest,
+        httpOptions,
+        sessionOptions,
         logger,
         metrics,
         sessionStore,
-    }: MCPHttpServerConstructorArgs<TServer, TContext, TMetrics>) {
+    }: MCPHttpServerOptions<TServer, TContext, TMetrics>) {
         super({
-            port: httpConfig.port,
-            hostname: httpConfig.host,
+            port: httpOptions.port,
+            hostname: httpOptions.host,
             logger,
             logContext: "mcpHttpServer",
         });
-        this.httpConfig = httpConfig;
-        this.sessionConfig = sessionConfig;
-        this.createServer = createServer;
-        this.createServerForRequest = createServerForRequest;
+        this.httpConfig = httpOptions;
+        this.sessionConfig = sessionOptions;
         this.metrics = metrics;
         this.sessionStore = sessionStore;
     }
 
     public async stop(): Promise<void> {
         await Promise.all([this.sessionStore.closeAllSessions(), super.stop()]);
+    }
+
+    /**
+     * Creates a new server instance. Override this method in subclasses
+     * to customize server creation for each new session.
+     */
+    protected async createServer(): Promise<TServer> {
+        throw new Error("MCPHttpServer.createServer() must be overridden in a subclass");
+    }
+
+    /**
+     * Creates a server instance for a specific request. Override this method
+     * in subclasses to customize per-request server creation. The default
+     * implementation delegates to createServer().
+     */
+    protected async createServerForRequest(request: TransportRequestContext): Promise<TServer> {
+        return this.createServer();
     }
 
     private reportSessionError(res: express.Response, errorCode: number): void {
@@ -250,10 +233,8 @@ export class MCPHttpServer<
                 query: req.query as Record<string, string | string[] | undefined>,
             };
 
-            // Use the provided createServer function or createServerForRequest if available
-            const server = this.createServerForRequest
-                ? await this.createServerForRequest({ request })
-                : await this.createServer();
+            // Use createServerForRequest to create server for this request
+            const server = await this.createServerForRequest(request);
 
             const transport = new StreamableHTTPServerTransport({
                 sessionIdGenerator: (): string => sessionId,
@@ -467,11 +448,12 @@ export class MCPHttpServer<
 
 /**
  * Creates a default MCPHttpServer instance from the provided constructor arguments.
+ * @deprecated Use `new MCPHttpServer()` directly instead. This factory function will be removed in a future version.
  */
 export const createDefaultMcpHttpServer = <
     TServer = unknown,
     TContext = unknown,
     TMetrics extends MetricDefinitions = MetricDefinitions,
 >(
-    args: MCPHttpServerConstructorArgs<TServer, TContext, TMetrics>
+    args: MCPHttpServerOptions<TServer, TContext, TMetrics>
 ): MCPHttpServer<TServer, TContext, TMetrics> => new MCPHttpServer<TServer, TContext, TMetrics>(args);

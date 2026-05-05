@@ -46,8 +46,8 @@ export {
 } from "./dryModeRunner.js";
 
 // HTTP Servers
-export { MCPHttpServer, createDefaultMcpHttpServer } from "./mcpHttpServer.js";
-export { MonitoringServer, createDefaultMonitoringServer } from "./monitoringServer.js";
+export { MCPHttpServer, type MCPHttpServerOptions } from "./mcpHttpServer.js";
+export { MonitoringServer, type MonitoringServerOptions } from "./monitoringServer.js";
 
 // Express HTTP Server base
 export { ExpressBasedHttpServer, type ExpressConfig } from "./expressBasedHttpServer.js";
